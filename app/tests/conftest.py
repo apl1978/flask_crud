@@ -35,5 +35,6 @@ def create_ad():
             'id': new_ad.id,
             'title': new_ad.title,
             'description': new_ad.description,
-            'user_id': new_ad.user_id
+            'user_id': new_ad.user_id,
+            'user_email': new_user.email
         }

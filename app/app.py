@@ -1,7 +1,7 @@
 import atexit
 from typing import Union
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 from flask.views import MethodView
 from sqlalchemy import Column, Integer, String, DateTime, create_engine, func, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.exc import IntegrityError
 import pydantic
 from flask_bcrypt import Bcrypt
+from flask_httpauth import HTTPBasicAuth
 
 PG_DSN = 'postgresql://postgres:postgres@127.0.0.1:5432/netology_ads'
 
@@ -20,6 +21,8 @@ atexit.register(lambda: engine.dispose())
 
 app = Flask('app')
 bcrypt = Bcrypt(app)
+
+auth = HTTPBasicAuth()
 
 
 def hash_password(password: str):
@@ -34,6 +37,9 @@ class UserModel(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     password = Column(String, nullable=False)
     ads = relationship('AdModel', backref='user')
+
+    def verify_password(self, password):
+        return bcrypt.check_password_hash(self.password, password)
 
 
 class AdModel(Base):
@@ -79,6 +85,24 @@ def error_handler(error: APIException):
         'message': error.message})
     response.status_code = error.status_code
     return response
+
+
+@auth.verify_password
+def verify_password(email, password):
+    with Session() as session:
+        user = session.query(UserModel).filter_by(email=email).first()
+        if not user or not user.verify_password(password):
+            return False
+        g.user = user
+        return True
+
+
+def owner_user(email, ad_user_id):
+    with Session() as session:
+        user = session.query(UserModel).filter_by(email=email).first()
+        if not user or not user.id == ad_user_id:
+            return False
+        return True
 
 
 class UserView(MethodView):
@@ -152,6 +176,7 @@ class AdView(MethodView):
                 'user_id': ad.user_id
             })
 
+    @auth.login_required
     def post(self):
         ad_data = validate(request.json, CreateAdSchema)
         with Session() as session:
@@ -166,10 +191,13 @@ class AdView(MethodView):
                 'user_id': new_ad.user_id
             })
 
+    @auth.login_required
     def patch(self, ad_id: int):
         ad_data = request.json
         with Session() as session:
             ad = session.query(AdModel).get(ad_id)
+            if not owner_user(request.authorization.get('username'), ad.user_id):
+                raise APIException(403, "auth error")
             for field, value in ad_data.items():
                 setattr(ad, field, value)
             session.add(ad)
@@ -182,9 +210,12 @@ class AdView(MethodView):
                 'user_id': ad.user_id
             })
 
+    @auth.login_required
     def delete(self, ad_id: int):
         with Session() as session:
             ad = session.query(AdModel).get(ad_id)
+            if not owner_user(request.authorization.get('username'), ad.user_id):
+                raise APIException(403, "auth error")
             session.delete(ad)
             session.commit()
             return jsonify({'status': 'deleted'})

@@ -74,8 +74,9 @@ def test_get_ad_not_exists():
 
 
 def test_create_ad(create_user):
-    response = requests.post(f'{API_URL}/ads/', json={'title': 'new_title', 'description': 'new_description',
-                                                      'user_id': create_user["id"]})
+    response = requests.post(f'{API_URL}/ads/', auth=(create_user["email"], '1111'),
+                             json={'title': 'new_title', 'description': 'new_description',
+                                   'user_id': create_user["id"]})
     assert response.status_code == 200
     response_data = response.json()
     assert 'id' in response_data
@@ -83,15 +84,65 @@ def test_create_ad(create_user):
     assert response_data['user_id'] == create_user["id"]
 
 
+def test_create_ad_unauthorized_user(create_user):
+    response = requests.post(f'{API_URL}/ads/', auth=(create_user["email"], '2222'),
+                             json={'title': 'new_title', 'description': 'new_description',
+                                   'user_id': create_user["id"]})
+    assert response.status_code == 401
+
+
+def test_create_ad_without_authorization(create_user):
+    response = requests.post(f'{API_URL}/ads/', json={'title': 'new_title', 'description': 'new_description',
+                                                      'user_id': create_user["id"]})
+    assert response.status_code == 401
+
+
 def test_patch_ad(create_ad):
-    response = requests.patch(f'{API_URL}/ads/{create_ad["id"]}', json={'title': 'patch_title'})
+    response = requests.patch(f'{API_URL}/ads/{create_ad["id"]}', auth=(create_ad["user_email"], '1234'),
+                              json={'title': 'patch_title'})
     assert response.status_code == 200
     response_data = response.json()
     assert response_data['title'] == 'patch_title'
 
 
+def test_patch_ad_unauthorized_user(create_ad):
+    response = requests.patch(f'{API_URL}/ads/{create_ad["id"]}', auth=(create_ad["user_email"], '2222'),
+                              json={'title': 'patch_title'})
+    assert response.status_code == 401
+
+
+def test_patch_ad_without_authorization(create_ad):
+    response = requests.patch(f'{API_URL}/ads/{create_ad["id"]}', json={'title': 'patch_title'})
+    assert response.status_code == 401
+
+
+def test_patch_ad_not_owner(create_ad):
+    response = requests.patch(f'{API_URL}/ads/{create_ad["id"]}', auth=('new_user2@email.ru', '3333'),
+                              json={'title': 'patch_title'})
+    assert response.status_code == 403
+    response_data = response.json()
+    assert response_data['message'] == 'auth error'
+
+
 def test_delete_ad(create_ad):
-    response = requests.delete(f'{API_URL}/ads/{create_ad["id"]}')
+    response = requests.delete(f'{API_URL}/ads/{create_ad["id"]}', auth=(create_ad["user_email"], '1234'))
     assert response.status_code == 200
     response_data = response.json()
     assert response_data['status'] == 'deleted'
+
+
+def test_delete_ad_unauthorized_user(create_ad):
+    response = requests.delete(f'{API_URL}/ads/{create_ad["id"]}', auth=(create_ad["user_email"], '2222'))
+    assert response.status_code == 401
+
+
+def test_delete_ad__without_authorization(create_ad):
+    response = requests.delete(f'{API_URL}/ads/{create_ad["id"]}')
+    assert response.status_code == 401
+
+
+def test_delete_ad_not_owner(create_ad):
+    response = requests.delete(f'{API_URL}/ads/{create_ad["id"]}', auth=('new_user2@email.ru', '3333'))
+    assert response.status_code == 403
+    response_data = response.json()
+    assert response_data['message'] == 'auth error'
