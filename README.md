@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 pytest tests -v -s
 
-система прав на основе HTTPBasicAuth, подразумевается, что доступ к API по HTTPS.
+Система прав на основе HTTPBasicAuth, подразумевается, что доступ к API по HTTPS.
 
 ## Задание 1
 
